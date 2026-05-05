@@ -7,33 +7,37 @@ part 'app_database.g.dart';
 
 @DataClassName('UserProfileData')
 class UserProfiles extends Table {
-  IntColumn get id => integer().autoIncrement()();
-  TextColumn get name => text()();
-  TextColumn get level => text().withDefault(const Constant('beginner'))();
+  IntColumn get id       => integer().autoIncrement()();
+  TextColumn get name    => text()();
+  TextColumn get level   => text().withDefault(const Constant('beginner'))();
+  // Auth columns (nullable so existing rows survive migration)
+  TextColumn get email        => text().nullable()();
+  TextColumn get passwordHash => text().nullable()();
+  TextColumn get salt         => text().nullable()();
 }
 
 @DataClassName('FocusAreaData')
 class FocusAreas extends Table {
-  IntColumn get id => integer().autoIncrement()();
-  IntColumn get userId => integer().references(UserProfiles, #id)();
+  IntColumn get id       => integer().autoIncrement()();
+  IntColumn get userId   => integer().references(UserProfiles, #id)();
   TextColumn get areaName => text()();
 }
 
 @DataClassName('SessionData')
 class Sessions extends Table {
-  IntColumn get id => integer().autoIncrement()();
-  DateTimeColumn get date => dateTime()();
-  IntColumn get durationSeconds => integer()();
-  IntColumn get streakDay => integer()();
+  IntColumn get id               => integer().autoIncrement()();
+  DateTimeColumn get date        => dateTime()();
+  IntColumn get durationSeconds  => integer()();
+  IntColumn get streakDay        => integer()();
 }
 
 @DataClassName('SessionStretchData')
 class SessionStretches extends Table {
-  IntColumn get id => integer().autoIncrement()();
-  IntColumn get sessionId => integer().references(Sessions, #id)();
-  TextColumn get stretchName => text()();
+  IntColumn get id              => integer().autoIncrement()();
+  IntColumn get sessionId       => integer().references(Sessions, #id)();
+  TextColumn get stretchName    => text()();
   IntColumn get durationSeconds => integer()();
-  TextColumn get feedback => text().nullable()();
+  TextColumn get feedback       => text().nullable()();
 }
 
 // ── Database ──────────────────────────────────────────────────────────────────
@@ -43,15 +47,19 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase() : super(_openConnection());
 
   @override
-  int get schemaVersion => 1;
+  int get schemaVersion => 2;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
         onCreate: (m) => m.createAll(),
         onUpgrade: (m, from, to) async {
-          // Hybrid: automatic for simple changes, manual otherwise.
-          // Add migration steps here when schemaVersion increments:
-          // from1To2: (m, schema) async { await m.addColumn(...); }
+          if (from < 2) {
+            await m.addColumn(userProfiles, userProfiles.email);
+            await m.addColumn(userProfiles, userProfiles.passwordHash);
+            await m.addColumn(userProfiles, userProfiles.salt);
+          }
+          // Future migrations:
+          // if (from < 3) { ... }
         },
       );
 

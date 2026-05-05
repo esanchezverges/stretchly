@@ -1,28 +1,49 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-class ProfileScreen extends StatefulWidget {
+import '../../providers/providers.dart';
+
+class ProfileScreen extends ConsumerStatefulWidget {
   const ProfileScreen({super.key});
 
   @override
-  State<ProfileScreen> createState() => _ProfileScreenState();
+  ConsumerState<ProfileScreen> createState() => _ProfileScreenState();
 }
 
-class _ProfileScreenState extends State<ProfileScreen> {
+class _ProfileScreenState extends ConsumerState<ProfileScreen> {
   String _duration = '10m';
   String _intensity = 'Moderate';
   bool _dailyReminder = true;
   bool _streakProtection = true;
   bool _postWorkout = false;
 
+  Future<void> _logout() async {
+    await ref.read(sharedPreferencesProvider).remove('auth_user_id');
+    ref.read(currentUserIdProvider.notifier).state = null;
+    if (mounted) {
+      Navigator.of(context).popUntil((route) => route.isFirst);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final colors = theme.colorScheme;
+    final profile = ref.watch(currentUserProfileProvider);
+    final streak = ref.watch(currentStreakProvider);
+    final count = ref.watch(sessionCountProvider);
 
     return Scaffold(
       body: CustomScrollView(
         slivers: [
-          _ProfileHeader(theme: theme),
+          _ProfileHeader(
+            theme: theme,
+            name: profile.valueOrNull?.name ?? '…',
+            level: _displayLevel(profile.valueOrNull?.level),
+            focusAreas: profile.valueOrNull?.focusAreas ?? [],
+            streak: streak.valueOrNull ?? 0,
+            sessionCount: count.valueOrNull ?? 0,
+            onLogout: _logout,
+          ),
           SliverToBoxAdapter(
             child: Padding(
               padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
@@ -46,7 +67,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   ),
                   const SizedBox(height: 20),
                   _SectionLabel('Focus areas'),
-                  const _FocusAreaChips(),
+                  _FocusAreaChips(
+                    initial: profile.valueOrNull?.focusAreas ?? [],
+                  ),
                   const SizedBox(height: 20),
                   _SectionLabel('Reminders'),
                   _ToggleRow(
@@ -97,14 +120,36 @@ class _ProfileScreenState extends State<ProfileScreen> {
       ),
     );
   }
+
+  String _displayLevel(String? level) {
+    switch (level) {
+      case 'intermediate': return 'Intermediate';
+      case 'advanced':     return 'Advanced';
+      default:             return 'Beginner';
+    }
+  }
 }
 
 // ── Header ────────────────────────────────────────────────────────────────────
 
 class _ProfileHeader extends StatelessWidget {
-  const _ProfileHeader({required this.theme});
+  const _ProfileHeader({
+    required this.theme,
+    required this.name,
+    required this.level,
+    required this.focusAreas,
+    required this.streak,
+    required this.sessionCount,
+    required this.onLogout,
+  });
 
   final ThemeData theme;
+  final String name;
+  final String level;
+  final List<String> focusAreas;
+  final int streak;
+  final int sessionCount;
+  final VoidCallback onLogout;
 
   @override
   Widget build(BuildContext context) {
@@ -113,6 +158,13 @@ class _ProfileHeader extends StatelessWidget {
       pinned: true,
       backgroundColor: const Color(0xFF111111),
       foregroundColor: Colors.white,
+      actions: [
+        IconButton(
+          tooltip: 'Cerrar sesión',
+          icon: const Icon(Icons.logout, color: Colors.white70),
+          onPressed: onLogout,
+        ),
+      ],
       flexibleSpace: FlexibleSpaceBar(
         background: SafeArea(
           child: Padding(
@@ -122,19 +174,19 @@ class _ProfileHeader extends StatelessWidget {
               children: [
                 Row(
                   children: [
-                    CircleAvatar(
+                    const CircleAvatar(
                       radius: 26,
                       backgroundColor: Colors.white12,
-                      child: const Icon(Icons.person, color: Colors.white38, size: 30),
+                      child: Icon(Icons.person, color: Colors.white38, size: 30),
                     ),
                     const SizedBox(width: 14),
                     Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          const Text(
-                            'Alex M.',
-                            style: TextStyle(
+                          Text(
+                            name,
+                            style: const TextStyle(
                               color: Colors.white,
                               fontSize: 20,
                               fontWeight: FontWeight.bold,
@@ -144,8 +196,9 @@ class _ProfileHeader extends StatelessWidget {
                           Wrap(
                             spacing: 6,
                             children: [
-                              _HeaderChip('Intermediate'),
-                              _HeaderChip('Mobility 🦵'),
+                              _HeaderChip(level),
+                              if (focusAreas.isNotEmpty)
+                                _HeaderChip(focusAreas.first),
                             ],
                           ),
                         ],
@@ -156,10 +209,13 @@ class _ProfileHeader extends StatelessWidget {
                 const SizedBox(height: 16),
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceAround,
-                  children: const [
-                    _StatItem(value: '24', label: 'Sessions'),
-                    _StatItem(value: '6 🔥', label: 'Streak'),
-                    _StatItem(value: '10 min', label: 'Avg session'),
+                  children: [
+                    _StatItem(value: '$sessionCount', label: 'Sessions'),
+                    _StatItem(
+                      value: streak > 0 ? '$streak 🔥' : '$streak',
+                      label: 'Streak',
+                    ),
+                    const _StatItem(value: '—', label: 'Avg session'),
                   ],
                 ),
               ],
@@ -273,14 +329,29 @@ class _SegmentedRow extends StatelessWidget {
 }
 
 class _FocusAreaChips extends StatefulWidget {
-  const _FocusAreaChips();
+  const _FocusAreaChips({required this.initial});
+  final List<String> initial;
 
   @override
   State<_FocusAreaChips> createState() => _FocusAreaChipsState();
 }
 
 class _FocusAreaChipsState extends State<_FocusAreaChips> {
-  final _areas = ['Hips', 'Hamstrings', 'Lower back'];
+  late List<String> _areas;
+
+  @override
+  void initState() {
+    super.initState();
+    _areas = List<String>.from(widget.initial);
+  }
+
+  @override
+  void didUpdateWidget(_FocusAreaChips old) {
+    super.didUpdateWidget(old);
+    if (old.initial != widget.initial) {
+      _areas = List<String>.from(widget.initial);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {

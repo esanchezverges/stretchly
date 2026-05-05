@@ -46,14 +46,22 @@ class HomeScreen extends ConsumerWidget {
             ),
             const SizedBox(height: 32),
             FilledButton.icon(
-              onPressed: () => Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (_) => RoutinePreviewScreen(
-                    stretches: StretchCatalog.random(),
+              onPressed: () {
+                final focusAreas = ref
+                    .read(currentUserProfileProvider)
+                    .valueOrNull
+                    ?.focusAreas ?? [];
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => RoutinePreviewScreen(
+                      stretches: StretchCatalog.random(
+                        focusAreas: focusAreas,
+                      ),
+                    ),
                   ),
-                ),
-              ),
+                );
+              },
               icon: const Icon(Icons.play_arrow),
               label: const Text('Generate Routine'),
               style: FilledButton.styleFrom(

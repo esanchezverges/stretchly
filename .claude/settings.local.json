@@ -4,7 +4,14 @@
       "Bash(flutter create *)",
       "PowerShell(flutter create . --project-name stretchly --org com.stretchly --platforms android,ios 2>&1)",
       "PowerShell(Get-Command flutter -ErrorAction SilentlyContinue; Get-ChildItem \"C:\\\\flutter\\\\bin\\\\flutter.bat\" -ErrorAction SilentlyContinue; Get-ChildItem \"$env:LOCALAPPDATA\\\\flutter\\\\bin\\\\flutter.bat\" -ErrorAction SilentlyContinue; where.exe flutter 2>$null)",
-      "PowerShell($env:PATH -split \";\" | Where-Object { $_ -match \"flutter|dart\" })"
+      "PowerShell($env:PATH -split \";\" | Where-Object { $_ -match \"flutter|dart\" })",
+      "Bash(git config *)",
+      "Bash(git commit *)",
+      "Bash(git remote *)",
+      "Bash(git branch *)",
+      "Bash(git push *)",
+      "PowerShell(git config --get core.sshCommand; $gitSsh = \\(Get-Command ssh -ErrorAction SilentlyContinue\\).Source; Write-Output \"SSH: $gitSsh\"; $gitHome = \\(git --exec-path | Split-Path -Parent | Split-Path -Parent\\); Write-Output \"Git home: $gitHome\")",
+      "PowerShell($env:GIT_SSH_COMMAND = \"ssh -o StrictHostKeyChecking=accept-new\"; git add .github/workflows/build.yml; git commit -m \"ci: add GitHub Actions pipeline to build and release APK on push to main\"; git push 2>&1)"
     ]
   }
 }

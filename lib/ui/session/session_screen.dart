@@ -2,10 +2,9 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../domain/models/session_record.dart';
 import '../../domain/models/stretch.dart';
-import '../../providers/providers.dart';
 import '../../services/sound_service.dart';
+import 'session_feedback_screen.dart';
 
 class SessionScreen extends ConsumerStatefulWidget {
   const SessionScreen({super.key, required this.stretches});
@@ -69,8 +68,17 @@ class _SessionScreenState extends ConsumerState<SessionScreen> {
       });
     } else {
       _timer?.cancel();
-      await _saveSession();
-      if (mounted) Navigator.pop(context);
+      if (mounted) {
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(
+            builder: (_) => SessionFeedbackScreen(
+              stretches: widget.stretches,
+              startTime: _startTime,
+            ),
+          ),
+        );
+      }
     }
   }
 
@@ -84,45 +92,6 @@ class _SessionScreenState extends ConsumerState<SessionScreen> {
   }
 
   void _togglePause() => setState(() => _isPaused = !_isPaused);
-
-  Future<void> _saveSession() async {
-    final durationSeconds = DateTime.now().difference(_startTime).inSeconds;
-
-    // Calculate streak based on last session
-    final last = await ref.read(sessionQueriesProvider).getLastSession();
-    final int newStreak;
-    if (last == null) {
-      newStreak = 1;
-    } else {
-      final diff = DateTime.now().difference(last.date).inDays;
-      if (diff == 0) {
-        newStreak = last.streakDay; // Already stretched today
-      } else if (diff == 1) {
-        newStreak = last.streakDay + 1; // Consecutive day
-      } else {
-        newStreak = 1; // Streak broken
-      }
-    }
-
-    final session = SessionRecord(
-      date: _startTime,
-      durationSeconds: durationSeconds,
-      streakDay: newStreak,
-      stretches: widget.stretches
-          .map((s) => StretchRecord(
-                name: s.name,
-                durationSeconds: s.totalSeconds,
-                feedback: null, // Feedback screen not yet implemented
-              ))
-          .toList(),
-    );
-
-    await ref.read(sessionCommandsProvider).saveSession(session);
-
-    // Invalidate so Home refreshes with the new last session
-    ref.invalidate(lastSessionProvider);
-    ref.invalidate(currentStreakProvider);
-  }
 
   @override
   Widget build(BuildContext context) {

@@ -33,6 +33,12 @@ class DriftSessionRepository implements ISessionQueries, ISessionCommands {
   }
 
   @override
+  Future<int> getSessionCount() async {
+    final rows = await _db.select(_db.sessions).get();
+    return rows.length;
+  }
+
+  @override
   Future<int> getCurrentStreak() async {
     final last = await getLastSession();
     if (last == null) return 0;
