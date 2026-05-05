@@ -1,13 +1,17 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+
+import '../../domain/models/session_record.dart';
 import '../../domain/models/stretch_catalog.dart';
+import '../../providers/providers.dart';
 import '../profile/profile_screen.dart';
 import '../routine/routine_preview_screen.dart';
 
-class HomeScreen extends StatelessWidget {
+class HomeScreen extends ConsumerWidget {
   const HomeScreen({super.key});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
     final colors = theme.colorScheme;
 
@@ -61,9 +65,9 @@ class HomeScreen extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 24),
-            _LastSessionCard(theme: theme, colors: colors),
+            _LastSessionCard(ref.watch(lastSessionProvider)),
             const Spacer(),
-            _QuickFilterRow(),
+            const _QuickFilterRow(),
             const SizedBox(height: 24),
           ],
         ),
@@ -72,9 +76,10 @@ class HomeScreen extends StatelessWidget {
   }
 }
 
+// ── Widgets ───────────────────────────────────────────────────────────────────
+
 class _FigurePlaceholder extends StatelessWidget {
   const _FigurePlaceholder({required this.colors});
-
   final ColorScheme colors;
 
   @override
@@ -82,53 +87,69 @@ class _FigurePlaceholder extends StatelessWidget {
     return CircleAvatar(
       radius: 60,
       backgroundColor: colors.surfaceContainerHighest,
-      child: Icon(
-        Icons.accessibility_new,
-        size: 52,
-        color: colors.onSurfaceVariant,
-      ),
+      child: Icon(Icons.accessibility_new, size: 52, color: colors.onSurfaceVariant),
     );
   }
 }
 
 class _LastSessionCard extends StatelessWidget {
-  const _LastSessionCard({required this.theme, required this.colors});
-
-  final ThemeData theme;
-  final ColorScheme colors;
+  const _LastSessionCard(this.asyncSession);
+  final AsyncValue<SessionRecord?> asyncSession;
 
   @override
   Widget build(BuildContext context) {
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-        child: Row(
-          children: [
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Last session',
-                    style: theme.textTheme.labelSmall?.copyWith(
-                      color: colors.onSurfaceVariant,
-                    ),
+    final theme = Theme.of(context);
+    final colors = theme.colorScheme;
+
+    return asyncSession.when(
+      loading: () => const SizedBox(height: 64),
+      error: (_, __) => const SizedBox.shrink(),
+      data: (session) {
+        if (session == null) return const SizedBox.shrink();
+
+        final mins = (session.durationSeconds / 60).ceil();
+        final count = session.stretches.length;
+        final label = _formatDate(session.date);
+
+        return Card(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Last session',
+                        style: theme.textTheme.labelSmall?.copyWith(
+                          color: colors.onSurfaceVariant,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        '$count stretches · $mins min',
+                        style: theme.textTheme.titleMedium?.copyWith(
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ],
                   ),
-                  const SizedBox(height: 4),
-                  Text(
-                    'Full Body · 8 min',
-                    style: theme.textTheme.titleMedium?.copyWith(
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                ],
-              ),
+                ),
+                Chip(label: Text(label)),
+              ],
             ),
-            Chip(label: const Text('Yesterday')),
-          ],
-        ),
-      ),
+          ),
+        );
+      },
     );
+  }
+
+  String _formatDate(DateTime date) {
+    final diff = DateTime.now().difference(date).inDays;
+    if (diff == 0) return 'Today';
+    if (diff == 1) return 'Yesterday';
+    return '$diff days ago';
   }
 }
 

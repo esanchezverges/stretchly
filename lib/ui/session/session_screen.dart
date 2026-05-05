@@ -1,23 +1,28 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+
+import '../../domain/models/session_record.dart';
 import '../../domain/models/stretch.dart';
+import '../../providers/providers.dart';
 import '../../services/sound_service.dart';
 
-class SessionScreen extends StatefulWidget {
+class SessionScreen extends ConsumerStatefulWidget {
   const SessionScreen({super.key, required this.stretches});
 
   final List<Stretch> stretches;
 
   @override
-  State<SessionScreen> createState() => _SessionScreenState();
+  ConsumerState<SessionScreen> createState() => _SessionScreenState();
 }
 
-class _SessionScreenState extends State<SessionScreen> {
+class _SessionScreenState extends ConsumerState<SessionScreen> {
   int _index = 0;
   late int _secondsLeft;
   bool _isPaused = false;
   Timer? _timer;
   final _sound = SoundService();
+  late final DateTime _startTime;
 
   static const _bg = Color(0xFF111111);
   static const _green = Color(0xFF4A7C59);
@@ -25,6 +30,7 @@ class _SessionScreenState extends State<SessionScreen> {
   @override
   void initState() {
     super.initState();
+    _startTime = DateTime.now();
     _secondsLeft = _parseDuration(widget.stretches[0].duration);
     _sound.init().then((_) => _startTimer());
   }
@@ -36,7 +42,6 @@ class _SessionScreenState extends State<SessionScreen> {
     super.dispose();
   }
 
-  // Parses "30s", "45s × 2", "60s" → returns the base seconds
   int _parseDuration(String duration) {
     final match = RegExp(r'(\d+)s').firstMatch(duration);
     return match != null ? int.parse(match.group(1)!) : 30;
@@ -56,7 +61,7 @@ class _SessionScreenState extends State<SessionScreen> {
     });
   }
 
-  void _goNext() {
+  Future<void> _goNext() async {
     if (_index < widget.stretches.length - 1) {
       setState(() {
         _index++;
@@ -64,7 +69,8 @@ class _SessionScreenState extends State<SessionScreen> {
       });
     } else {
       _timer?.cancel();
-      Navigator.pop(context);
+      await _saveSession();
+      if (mounted) Navigator.pop(context);
     }
   }
 
@@ -78,6 +84,45 @@ class _SessionScreenState extends State<SessionScreen> {
   }
 
   void _togglePause() => setState(() => _isPaused = !_isPaused);
+
+  Future<void> _saveSession() async {
+    final durationSeconds = DateTime.now().difference(_startTime).inSeconds;
+
+    // Calculate streak based on last session
+    final last = await ref.read(sessionQueriesProvider).getLastSession();
+    final int newStreak;
+    if (last == null) {
+      newStreak = 1;
+    } else {
+      final diff = DateTime.now().difference(last.date).inDays;
+      if (diff == 0) {
+        newStreak = last.streakDay; // Already stretched today
+      } else if (diff == 1) {
+        newStreak = last.streakDay + 1; // Consecutive day
+      } else {
+        newStreak = 1; // Streak broken
+      }
+    }
+
+    final session = SessionRecord(
+      date: _startTime,
+      durationSeconds: durationSeconds,
+      streakDay: newStreak,
+      stretches: widget.stretches
+          .map((s) => StretchRecord(
+                name: s.name,
+                durationSeconds: s.totalSeconds,
+                feedback: null, // Feedback screen not yet implemented
+              ))
+          .toList(),
+    );
+
+    await ref.read(sessionCommandsProvider).saveSession(session);
+
+    // Invalidate so Home refreshes with the new last session
+    ref.invalidate(lastSessionProvider);
+    ref.invalidate(currentStreakProvider);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -162,6 +207,8 @@ class _SessionScreenState extends State<SessionScreen> {
   }
 }
 
+// ── Sub-widgets (unchanged) ───────────────────────────────────────────────────
+
 class _TopBar extends StatelessWidget {
   const _TopBar({required this.index, required this.total, required this.onClose});
 
@@ -183,15 +230,18 @@ class _TopBar extends StatelessWidget {
             child: Row(
               mainAxisAlignment: MainAxisAlignment.center,
               spacing: 6,
-              children: List.generate(total, (i) => AnimatedContainer(
-                duration: const Duration(milliseconds: 200),
-                width: i == index ? 18 : 7,
-                height: 7,
-                decoration: BoxDecoration(
-                  color: i <= index ? const Color(0xFF4A7C59) : Colors.white24,
-                  borderRadius: BorderRadius.circular(4),
+              children: List.generate(
+                total,
+                (i) => AnimatedContainer(
+                  duration: const Duration(milliseconds: 200),
+                  width: i == index ? 18 : 7,
+                  height: 7,
+                  decoration: BoxDecoration(
+                    color: i <= index ? const Color(0xFF4A7C59) : Colors.white24,
+                    borderRadius: BorderRadius.circular(4),
+                  ),
                 ),
-              )),
+              ),
             ),
           ),
           SizedBox(
@@ -221,7 +271,7 @@ class _Illustration extends StatelessWidget {
         borderRadius: BorderRadius.circular(12),
         border: Border.all(color: Colors.white12),
       ),
-      child: Icon(Icons.accessibility_new, size: 72, color: Colors.white24),
+      child: const Icon(Icons.accessibility_new, size: 72, color: Colors.white24),
     );
   }
 }
